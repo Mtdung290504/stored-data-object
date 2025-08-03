@@ -1,0 +1,20 @@
+{
+	"name": "stored-data-object",
+	"version": "1.0.0",
+	"type": "module",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.mjs",
+	"exports": {
+		"require": "./dist/index.cjs",
+		"import": "./dist/index.mjs"
+	},
+	"scripts": {
+		"build": "tsup",
+		"dev": "tsup --watch"
+	},
+	"devDependencies": {
+		"tsup": "^8.5.0"
+	},
+	"keywords": [],
+	"license": "MIT"
+}
