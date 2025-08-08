@@ -6,7 +6,7 @@ const fileLocks = new Map();
 
 /**
  * Get the shared lock for a file to prevent race conditions across multiple instances
- * 
+ *
  * @param {string} filePath - Absolute path to the file
  * @returns {FileLock} The file lock instance
  */
@@ -43,7 +43,7 @@ class FileLock {
 
 /**
  * Builder class for StoredDataObject with chainable init method
- * 
+ *
  * @template T
  * @template {T extends any[] ? T : { [K in keyof T]?: T[K] }} InitData
  */
@@ -62,7 +62,7 @@ class StoredDataObjectBuilder {
 
 	/**
 	 * Set initialization data for default values
-     * 
+	 *
 	 * @template {T extends any[] ? T : Partial<T>} R
 	 * @param {R} initData - Object with default values to merge with loaded data
 	 * @returns {StoredDataObjectBuilder<T, R>}
@@ -75,7 +75,7 @@ class StoredDataObjectBuilder {
 
 	/**
 	 * Build the final StoredDataObject
-     * 
+	 *
 	 * @returns {Promise<{
 	 *   data: T extends any[] ? T : InitData extends null ? Partial<T> : InitData extends T ? InitData : InitData & Partial<Omit<T, keyof InitData>>,
 	 *   write(): Promise<void>,
@@ -173,7 +173,7 @@ export class StoredDataObject {
 	 * @param {T} schema - Schema object/array that defines the structure and provides type inference
 	 * @param {Object} [options] - Configuration options
 	 * @param {BufferEncoding} [options.encoding='utf8'] - File encoding
-	 * @returns {StoredDataObjectBuilder<T, null>}
+	 * @returns {StoredDataObjectBuilder<T, T extends any[] ? T : { [K in keyof T]?: T[K] | undefined; }>}
 	 */
 	static from(filePath, schema, options = {}) {
 		return new StoredDataObjectBuilder(filePath, schema, options);
