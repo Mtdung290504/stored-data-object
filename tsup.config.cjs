@@ -5,4 +5,5 @@ module.exports = {
 	splitting: false,
 	clean: true,
 	minify: false,
+	dts: true,
 };
