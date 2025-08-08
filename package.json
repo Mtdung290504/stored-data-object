@@ -1,6 +1,6 @@
 {
 	"name": "stored-data-object",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "A lightweight JSON-based data persistence library for demo, prototype, and lite applications. Skip the database setup complexity and get straight to building your app.",
 	"repository": {
 		"type": "git",
