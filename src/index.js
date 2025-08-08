@@ -6,6 +6,7 @@ const fileLocks = new Map();
 
 /**
  * Get the shared lock for a file to prevent race conditions across multiple instances
+ * 
  * @param {string} filePath - Absolute path to the file
  * @returns {FileLock} The file lock instance
  */

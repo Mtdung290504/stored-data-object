@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "declaration": true, // xuất file .d.ts
+        "emitDeclarationOnly": true, // chỉ xuất type, không build js
+        "outDir": "dist", // nơi chứa file .d.ts
+        "allowJs": true, // cho phép xử lý .js
+        "checkJs": true, // dùng JSDoc để generate type
+        "strict": true, // bật kiểm tra chặt chẽ
+        "moduleResolution": "node",
+        "target": "ES2020",
+        "module": "ES2020",
+        "esModuleInterop": true
+    },
+    "include": [
+        "src/**/*"
+    ]
+}
