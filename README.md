@@ -1,5 +1,5 @@
 # StoredDataObject
-
+[![npm version](https://img.shields.io/npm/v/stored-data-object.svg)](https://www.npmjs.com/package/stored-data-object)
 A lightweight JSON-based data persistence library for demo, prototype, and lite applications. Skip the database setup complexity and get straight to building your app.
 
 ## Features
@@ -18,6 +18,10 @@ A lightweight JSON-based data persistence library for demo, prototype, and lite 
 - Small data sets
 
 ## Quick Start
+
+```bash
+npm install stored-data-object
+```
 
 ```javascript
 import { StoredDataObject } from 'stored-data-object';

@@ -1,6 +1,15 @@
 {
 	"name": "stored-data-object",
 	"version": "1.0.2",
+	"description": "A lightweight JSON-based data persistence library for demo, prototype, and lite applications. Skip the database setup complexity and get straight to building your app.",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Mtdung290504/stored-data-object.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Mtdung290504/stored-data-object/issues"
+	},
+	"homepage": "https://github.com/Mtdung290504/stored-data-object#readme",
 	"type": "module",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.mjs",
