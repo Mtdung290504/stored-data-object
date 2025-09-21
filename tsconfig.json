@@ -6,7 +6,7 @@
         "allowJs": true, // cho phép xử lý .js
         "checkJs": true, // dùng JSDoc để generate type
         "strict": true, // bật kiểm tra chặt chẽ
-        "moduleResolution": "node",
+        "moduleResolution": "node10",
         "target": "ES2020",
         "module": "ES2020",
         "esModuleInterop": true
