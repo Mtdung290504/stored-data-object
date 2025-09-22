@@ -1,19 +1,23 @@
 // Complete usage examples for StoredDataObject
+// @ts-check
 
-import { StoredDataObject } from '../src/index.v3.js';
+import { StoredDataObject } from '../src/index.js';
 
 // Với init data tĩnh
-const userStore = await StoredDataObject.from('./data/student.json', { name: 'string', age: 'number' }, 'object', {
-	initData: { name: 'Default User', age: 18 },
+const userStore = await StoredDataObject.from({
+	file: './data/student.json',
+	storageType: 'object',
+	schema: { name: 'string', age: 'number' },
+	initValue: { name: 'Default User', age: 18 },
 });
 
 // Với init data function
-const configStore = await StoredDataObject.from(
-	'./data/config.json',
-	{ theme: 'string', version: 'string' },
-	'object',
-	{ initData: { theme: 'dark', version: '1.0.0' } }
-);
+const configStore = await StoredDataObject.from({
+	file: './data/config.json',
+	storageType: 'object',
+	schema: { theme: 'string', version: 'string' },
+	initValue: { theme: 'dark', version: '1.0.0' },
+});
 
 // // Reset về init data
 // await userStore.reset();
