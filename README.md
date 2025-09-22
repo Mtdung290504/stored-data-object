@@ -1,145 +1,177 @@
 # StoredDataObject
-[![npm version](https://img.shields.io/npm/v/stored-data-object.svg)](https://www.npmjs.com/package/stored-data-object)
-A lightweight JSON-based data persistence library for demo, prototype, and lite applications. Skip the database setup complexity and get straight to building your app.
 
-## Features
-
-- **Zero Configuration** - No database setup required
-- **File-based Storage** - Uses simple JSON files
-- **Thread Safe** - Built-in file locking prevents race conditions
-
-## Perfect For
-
-- Rapid prototyping
-- Demo applications
-- Local development
-- Test environments
-- Configuration storage
-- Small data sets
+**_Note: This is a google translator translation from Vietnamese_**  
+StoredDataObject is a lightweight JSON data storage library, suitable for prototypes, demos, or small applications. This documentation only describes the **Quick Start**, **API**, and **datatype** — detailed examples are in `example/index.js`.
 
 ## Quick Start
+
+Installation:
 
 ```bash
 npm install stored-data-object
 ```
 
-```javascript
-import { StoredDataObject } from 'stored-data-object';
+Basic usage:
 
-// Basic usage - data will be Partial<T>
-const users = await StoredDataObject.from('./data/users.json', { name: '', age: 0, email: '' }).build();
+```js
+import { StoredDataObject, defineSchema } from 'stored-data-object';
 
-users.data.name = 'John';
+// Define a schema (you can use defineSchema to get type inference support when using TS/JSDoc).
+// If inference is not important, you can pass the schema object directly to `schema`.
+const userSchema = defineSchema({
+	name: 'string',
+	age: 'number?',
+	active: 'boolean',
+});
+
+// Create or open a file to store an array of objects
+const users = await StoredDataObject.from({
+	file: './data/users.json',
+	storageType: 'array',
+	schema: userSchema,
+	/*
+        Or: {
+            name: 'string',
+            age: 'number?',
+            active: 'boolean',
+        }
+    */
+});
+
+users.data.push({ name: 'Alice', active: true });
 await users.write();
 
-// With default values - ensures required fields exist
-const settings = await StoredDataObject.from('./data/settings.json', { theme: '', lang: '', debug: false })
-	.init({ theme: 'dark', lang: 'en', debug: false })
-	.build();
+// Reload data from file (keep object reference)
+await users.reload();
 
-// settings.data.theme is guaranteed to be 'dark' or loaded value
+// Reset to default value (or pass newInitValue)
+await users.reset();
 ```
+
+If you need to initialize the file for the first time with a specific value, pass `initValue` in the config:
+
+```js
+const settings = await StoredDataObject.from({
+	file: './data/settings.json',
+	storageType: 'object',
+	schema: { theme: 'string', debug: 'boolean?' },
+	initValue: { theme: 'dark', debug: false },
+});
+```
+
+For a more detailed example: see `example/index.js` in the repository.
 
 ## API
 
-### `StoredDataObject.from(filePath, schema, options?)`
+### `defineSchema(schemaDef)`
 
-Creates a new StoredDataObject builder.
+Declare a schema for inference/type checking. Returns the `schemaDef` itself (used for type inference when using TypeScript/JSDoc).
 
-- `filePath` - Path to JSON file (created if doesn't exist)
-- `schema` - Object/array defining the data structure
-- `options` - Configuration options (encoding, etc.)
+**Parameters**
 
-### `.init(defaultValues)`
+- `schemaDef` — the object that defines the schema (see the Datatypes section).
 
-Optional chaining method to provide default values.
+**Returns**
 
-- `defaultValues` - Object with default values for schema fields
-- Returns builder with enhanced type safety
+- object `schemaDef` (intact).
 
-### `.build()`
+---
 
-Builds the final data object.
+### `StoredDataObject.from(config, options?)`
 
-Returns object with:
+Create (or open) a store from a JSON file. The function is `static async` and returns an object containing `data`, `filePath` and manipulation methods.
 
-- `data` - Your typed data object
-- `write()` - Save data to file
-- `reload()` - Reload data from file
-- `filePath` - Absolute path to file
+**Parameters `config` (object):**
 
-## Type Safety
+- `file: string` — path to the JSON file (file will be created if not existing).
 
-StoredDataObject provides intelligent TypeScript inference:
+- `storageType: 'object' | 'array'` — storage mode: a single object or an array of objects according to the schema.
 
-```javascript
-// Without init: Partial<T> - all fields optional
-const db1 = await StoredDataObject.from('file.json', { name: '', age: 0 }).build();
-// db1.data: { name?: string, age?: number }
+- `schema: SchemaDefinition` — schema defining the data.
 
-// With partial init: Mixed types
-const db2 = await StoredDataObject.from('file.json', { name: '', age: 0, email: '' }).init({ name: 'Unknown' }).build();
-// db2.data: { name: string } & Partial<{ age: number, email: string }>
+- `initValue?` — (optional) initial value when the file does not exist. With `storageType: 'object'` pass a single object; with `'array'` pass an array of objects.
 
-// With full init: Complete type
-const db3 = await StoredDataObject.from('file.json', { name: '', age: 0 }).init({ name: 'Unknown', age: 0 }).build();
-// db3.data: { name: string, age: number }
+**Optional `options` parameter:**
+
+- `encoding?: BufferEncoding` — default `'utf8'`.
+
+- `autoValidate?: boolean` — default `true`. If `true` then initial data and data read from file will be validated according to the schema; if validation fails an error will be thrown.
+
+**Returns:** an object of the form (summary):
+
+```js
+{
+    data, // loaded/initialized data
+    filePath, // absolute path to the file
+    async write(), // write current data to file (validate before writing if autoValidate = true)
+    async reload(), // reread file and update current data (keep reference)
+    async reset(newInitValue?) // reset to default or newInitValue and write to file
+}
 ```
 
-## Examples
+**Important Behavior**
 
-Check out the comprehensive examples in the [`usage/`](./usage/) directory:
+- If the file does not exist, the library will create a parent directory (recursive) and write the file with `initValue` or default value generated from the schema.
+- By default `autoValidate` is `true`. If any value does not match the schema, the function will throw an error with a detailed message.
+- The library has an internal _file lock_ mechanism to ensure that read/write/reload/reset operations are performed sequentially in the same process (reducing race conditions). This is not a locking mechanism between different processes.
+- When `reload()` or `reset()` is called, the current data is updated **in place** (mutated) to keep the reference intact for other code holding a reference to `data` (e.g. UI, systems, etc.).
 
-- Basic usage patterns
-- Type safety demonstrations
-- Array handling
-- Multi-instance synchronization
-- Error handling
-- Configuration management
+## Datatypes / Schema
 
-Run the demo:
+Schema is defined by object; each property can be a **basic type** or a **nested schema**.
 
-```bash
-node .\usage\
+**Valid property type values**
+
+- `'string'` — required string, if no value is given, it will be initialized to `''`.
+- `'string?'` — optional string (`string | undefined`).
+- `'number'` — required number, defaults to `0`.
+- `'number?'` — optional number (`number | undefined`).
+- `'boolean'` — required boolean, default `false`.
+- `'boolean?'` — optional boolean (`boolean | undefined`).
+- nested object — nested schema (child keys follow the same syntax as above).
+
+**Valid schema example**
+
+```js
+const schema = defineSchema({
+	id: 'number',
+	name: 'string?',
+	profile: {
+		email: 'string',
+		verified: 'boolean?',
+	},
+});
 ```
 
-## Use Cases
+**Mapping to runtime types (overview)**
 
-### User Preferences
+- `string` → `string` (default `''` if required and no value)
+- `string?` → `string | undefined`
+- `number` → `number` (default `0`)
+- `number?` → `number | undefined`
+- `boolean` → `boolean` (default `false`)
+- `boolean?` → `boolean | undefined`
+- nested object → object with corresponding fields
 
-```javascript
-const prefs = await StoredDataObject.from('./user-prefs.json', { theme: '', fontSize: 0, notifications: true })
-	.init({ theme: 'system', fontSize: 14, notifications: true })
-	.build();
-```
+**Notes on default values**
 
-### Todo List
+- `createDefaultFromSchema` will generate default values ​​for **non-optional** fields according to the above rule. Optional fields will not be set (keep `undefined`) if there is no initial value.
 
-```javascript
-const todos = await StoredDataObject.from('./todos.json', []).build();
+## Errors & Exception Handling
 
-todos.data.push({ id: 1, task: 'Learn StoredDataObject', done: false });
-await todos.write();
-```
+- If the file contains invalid JSON, the reader function will throw an error with the message `"Invalid JSON in file: <path>..."`.
+- If `autoValidate: true` and the data (from `initValue` or file) does not match the schema, `from()` or `write()` will throw an error with a detailed message (specifying the expected field and type).
 
-### Application State
+- With `storageType: 'array'`, validation requires the data read from the file to be an array (otherwise an error will be thrown).
 
-```javascript
-const state = await StoredDataObject.from('./app-state.json', { currentUser: null, isLoggedIn: false })
-	.init({ currentUser: null, isLoggedIn: false })
-	.build();
-```
+## Operational notes / limitations
 
-## When NOT to Use
+- The file locking mechanism is in-process — it is not safe for multiple processes/instances to edit the file simultaneously.
 
-- Production applications with high concurrency
-- Large datasets (>50MB)
-- Complex relational data
-- High-frequency writes (>1000/sec)
-- Multi-server deployments
+- The design is suitable for small datasets/moderate read-write; not recommended for production applications with high concurrency needs or large datasets.
 
-For these scenarios, use a proper database like PostgreSQL, MongoDB, or Redis.
+- Error messages should be clear for easy debugging (e.g., state which field has the wrong type and current value).
 
-## License
+## Detailed examples
 
-MIT
+The full examples (array handling, multi-instance sync, error cases, etc.) are in `example/index.js`.

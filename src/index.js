@@ -33,7 +33,7 @@ import path from 'path';
 /**
  * @typedef {{
  * 	encoding?: BufferEncoding;
- * 	autoValidate?: false;
+ * 	autoValidate?: boolean;
  * }} StoredDataOptions
  */
 
@@ -133,11 +133,13 @@ function createDefaultFromSchema(schema) {
  *
  * @param {any} data - Input data to validate
  * @param {SchemaDefinition} schema - Schema definition
+ *
  * @returns {Record<string, any>} Validated and coerced data
+ * @throws {Error} When validation fails
  */
 function validateAndCoerce(data, schema) {
 	if (!data || typeof data !== 'object') {
-		return createDefaultFromSchema(schema);
+		throw new Error('Data must be an object');
 	}
 
 	const inputData = /** @type {Record<string, any>} */ (data);
@@ -170,18 +172,26 @@ function validateAndCoerce(data, schema) {
 				}
 				// Optional field stays undefined
 			} else {
-				// Coerce the value
+				// Strict validation with clear error messages
 				switch (baseType) {
 					case 'string':
-						result[key] = String(value);
+						if (typeof value !== 'string') {
+							throw new Error(`Field '${key}' must be a string, got ${typeof value}: ${JSON.stringify(value)}`);
+						}
+						result[key] = value;
 						break;
 					case 'number': {
-						const num = Number(value);
-						result[key] = isNaN(num) ? 0 : num;
+						if (typeof value !== 'number' || isNaN(value)) {
+							throw new Error(`Field '${key}' must be a number, got ${typeof value}: ${JSON.stringify(value)}`);
+						}
+						result[key] = value;
 						break;
 					}
 					case 'boolean':
-						result[key] = Boolean(value);
+						if (typeof value !== 'boolean') {
+							throw new Error(`Field '${key}' must be a boolean, got ${typeof value}: ${JSON.stringify(value)}`);
+						}
+						result[key] = value;
 						break;
 				}
 			}
@@ -212,25 +222,6 @@ function resolveInitValue(initValue, mode, defaultValue) {
 }
 
 /**
- * Ensure file exists and create with initial data if needed
- *
- * @param {string} absPath - Absolute file path
- * @param {any} defaultValue - Default value to write
- * @param {BufferEncoding} encoding - File encoding
- *
- * @returns {Promise<void>}
- */
-async function ensureFileExists(absPath, defaultValue, encoding) {
-	try {
-		await fs.access(absPath);
-	} catch {
-		console.log(`> [StoredDataObject.from] File not found, creating: ${absPath}`);
-		await fs.mkdir(path.dirname(absPath), { recursive: true });
-		await fs.writeFile(absPath, JSON.stringify(defaultValue, null, '\t'), encoding);
-	}
-}
-
-/**
  * Read and parse JSON file safely
  * @param {string} absPath - Absolute file path
  * @param {BufferEncoding} encoding - File encoding
@@ -250,22 +241,31 @@ async function readAndParseJSON(absPath, encoding, defaultValue) {
 
 /**
  * Validate parsed data according to schema and mode
+ *
  * @param {any} parsedData - Raw parsed data
  * @param {SchemaDefinition} schemaDefinition - Schema definition
  * @param {'object' | 'array'} mode - Storage mode
  * @param {boolean} autoValidate - Whether to validate
+ *
  * @returns {any} Validated data
+ * @throws {Error} When autoValidate is true and validation fails
  */
 function validateParsedData(parsedData, schemaDefinition, mode, autoValidate) {
 	if (!autoValidate) {
-		return parsedData;
+		return parsedData; // Return raw data, no validation
 	}
 
 	if (mode === 'array') {
 		if (!Array.isArray(parsedData)) {
-			return [];
+			throw new Error('Data must be an array when storageType is "array"');
 		}
-		return parsedData.map((item) => validateAndCoerce(item, schemaDefinition));
+		return parsedData.map((item, index) => {
+			try {
+				return validateAndCoerce(item, schemaDefinition);
+			} catch (err) {
+				throw new Error(`Validation failed at array index ${index}: ${/** @type {Error} */ (err).message}`);
+			}
+		});
 	}
 
 	return validateAndCoerce(parsedData, schemaDefinition);
@@ -333,18 +333,19 @@ function updateDataReference(data, newValidatedData) {
 export class StoredDataObject {
 	/**
 	 * Create a data store from JSON file
+	 *
 	 * @template {'object' | 'array'} Mode
 	 * @template {SchemaDefinition} S
 	 *
 	 * @param {Object} config
 	 * @param {string} config.file - Path to JSON file
-	 * @param {Mode} config.storageType - Storage mode
+	 * @param {Mode} config.storageType - Storage mode, specifies whether you want to store an array of schema objects or just a single schema object
 	 * @param {S} config.schema - Schema definition
-	 * @param {'array' extends Mode ? SchemaToType<S>[] : SchemaToType<S>} [config.initValue]
-	 *
+	 * @param {'array' extends Mode ? SchemaToType<S>[] : SchemaToType<S>} [config.initValue] - If the file does not exist, it will be created with this value as the default.
 	 * @param {StoredDataOptions} [options] - Configuration options
 	 *
 	 * @returns {Promise<StoredDataResult<'array' extends Mode ? SchemaToType<S>[] : SchemaToType<S>>>}
+	 * @throws {Error} When autoValidate is true (default) and initValue does not match schema
 	 */
 	static async from(config, options = {}) {
 		const { encoding = 'utf8', autoValidate = true } = options;
@@ -355,14 +356,49 @@ export class StoredDataObject {
 		const defaultItem = createDefaultFromSchema(schema);
 		const defaultValue = resolveInitValue(initValue, mode, defaultItem);
 
-		// Ensure file exists
-		await ensureFileExists(absPath, defaultValue, encoding);
+		// VALIDATE FIRST - before any file operations
+		if (autoValidate) {
+			try {
+				validateParsedData(defaultValue, schema, mode, true);
+			} catch (err) {
+				throw new Error(`Initial value validation failed: ${/** @type {Error} */ (err).message}`);
+			}
+		}
 
-		// Read and parse initial data
-		const parsedData = await readAndParseJSON(absPath, encoding, defaultValue);
+		let parsedData;
+		let validatedData;
 
-		// Validate data
-		const validatedData = validateParsedData(parsedData, schema, mode, autoValidate);
+		// Check if file exists
+		try {
+			await fs.access(absPath);
+
+			// File exists - read and validate
+			parsedData = await readAndParseJSON(absPath, encoding, defaultValue);
+
+			// Validate existing data BEFORE using it
+			if (autoValidate) {
+				try {
+					validatedData = validateParsedData(parsedData, schema, mode, true);
+				} catch (err) {
+					throw new Error(`Existing file data validation failed: ${/** @type {Error} */ (err).message}`);
+				}
+			} else {
+				validatedData = parsedData;
+			}
+		} catch (accessError) {
+			// File doesn't exist - use validated default value
+			console.log(`> [StoredDataObject.from] File not found, creating: ${absPath}`);
+
+			// Create directory structure
+			await fs.mkdir(path.dirname(absPath), { recursive: true });
+
+			// Use already-validated default value
+			validatedData = autoValidate ? validateParsedData(defaultValue, schema, mode, true) : defaultValue;
+
+			// Write initial data to file
+			await fs.writeFile(absPath, JSON.stringify(validatedData, null, '\t'), encoding);
+		}
+
 		const data = validatedData;
 		const lock = getFileLock(absPath);
 
@@ -373,9 +409,20 @@ export class StoredDataObject {
 			/**
 			 * Write current data to file
 			 * @returns {Promise<void>}
+			 * @throws {Error} When autoValidate is true (default) and data does not match schema
 			 */
 			async write() {
-				await lock.run(async () => await fs.writeFile(absPath, JSON.stringify(data, null, '\t'), encoding));
+				await lock.run(async () => {
+					// Validate before writing
+					if (autoValidate) {
+						try {
+							validateParsedData(data, schema, mode, true);
+						} catch (err) {
+							throw new Error(`Data validation failed before write: ${/** @type {Error} */ (err).message}`);
+						}
+					}
+					await fs.writeFile(absPath, JSON.stringify(data, null, '\t'), encoding);
+				});
 			},
 
 			/**
