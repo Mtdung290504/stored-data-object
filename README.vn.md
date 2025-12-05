@@ -1,160 +1,633 @@
-# StoredDataObject
+# stored-data-object
 
-StoredDataObject là thư viện lưu trữ dữ liệu dạng JSON nhẹ, phù hợp cho prototype, demo, hoặc ứng dụng nhỏ. Tài liệu này chỉ mô tả **Quick Start**, **API** và **datatype** — các ví dụ chi tiết nằm trong `example/index.js`.
+`stored-data-object` là thư viện Node (chỉ JS) lưu trữ dữ liệu dạng JSON nhẹ, phù hợp cho prototype, demo, hoặc ứng dụng nhỏ. Thư viện hỗ trợ schema validation, type safety, và tự động xử lý các thao tác xử lý file JSON.
 
-## Quick Start
-
-Cài đặt:
+## Cài đặt
 
 ```bash
 npm install stored-data-object
 ```
 
-Sử dụng cơ bản:
+## Quick Start
+
+### Object đơn
 
 ```js
-import { StoredDataObject, defineSchema } from 'stored-data-object';
+import SDO from 'stored-data-object';
 
-const userSchema = defineSchema({
+// Định nghĩa schema
+const settingsSchema = SDO.schema({
+	theme: 'string',
+	fontSize: 'number',
+	notifications: 'boolean?',
+});
+
+// Tạo hoặc mở file
+const settings = await SDO.create({
+	file: './data/settings.json',
+	schema: settingsSchema,
+	default: { theme: 'dark', fontSize: 14 },
+});
+
+// Sử dụng
+settings.data.theme = 'light';
+await settings.write();
+
+// Reload từ file
+await settings.reload();
+
+// Reset về mặc định
+await settings.reset();
+```
+
+### Mảng objects
+
+```js
+const userSchema = SDO.schema({
+	id: 'number',
 	name: 'string',
-	age: 'number?',
+	email: 'string',
 	active: 'boolean',
 });
 
-// Tạo hoặc mở file lưu mảng objects
-const users = await StoredDataObject.from({
-	file: './data/users.json',
-	storageType: 'array',
-	schema: userSchema,
+// Định nghĩa schema cho mảng user
+const usersSchema = SDO.schema({
+	users: [userSchema], // Mảng các user objects
+	lastUpdated: 'number',
 });
 
-users.data.push({ name: 'Alice', active: true });
-await users.write();
+const db = await SDO.create({
+	file: './data/users.json',
+	schema: usersSchema,
+	default: { users: [], lastUpdated: Date.now() },
+});
 
-// Reload dữ liệu từ file (giữ nguyên tham chiếu object)
-await users.reload();
-
-// Reset về giá trị mặc định (hoặc truyền newInitValue)
-await users.reset();
+// Thêm user mới
+db.data.users.push({
+	id: 1,
+	name: 'Alice',
+	email: 'alice@example.com',
+	active: true,
+});
+db.data.lastUpdated = Date.now();
+await db.write();
 ```
 
-Nếu cần khởi tạo file lần đầu với giá trị cụ thể, truyền `initValue` trong config:
+### Nested objects
 
 ```js
-const settings = await StoredDataObject.from({
-	file: './data/settings.json',
-	storageType: 'object',
-	schema: defineSchema({ theme: 'string', debug: 'boolean?' }),
-	initValue: { theme: 'dark', debug: false },
+const profileSchema = SDO.schema({
+	user: {
+		name: 'string',
+		age: 'number?',
+		contact: {
+			email: 'string',
+			phone: 'string?',
+		},
+	},
+	preferences: {
+		theme: 'string',
+		language: 'string',
+	},
 });
+
+const profile = await SDO.create({
+	file: './data/profile.json',
+	schema: profileSchema,
+});
+
+profile.data.user.name = 'Bob';
+profile.data.user.contact.email = 'bob@example.com';
+await profile.write();
 ```
 
-Ví dụ chi tiết hơn: xem tại `example/index.js` trong repository.
+## API Reference
 
-## API
+### `SDO.schema(schemaDef)`
 
-### `defineSchema(schemaDef)`
+Định nghĩa schema cho type inference và validation. Trả về chính object schema (dùng cho TypeScript/JSDoc type inference).
 
-Khai báo schema để dùng cho inference/kiểm tra kiểu. Trả về chính `schemaDef` (dùng cho type inference khi dùng TypeScript/JSDoc).
+**Tham số:**
 
-**Tham số**
+- `schemaDef` — Object định nghĩa cấu trúc dữ liệu (xem phần Schema Types)
 
-- `schemaDef` — object định nghĩa schema (xem phần Datatypes).
+**Trả về:**
 
-**Trả về**
+- Schema definition object (nguyên vẹn)
 
-- object `schemaDef` (nguyên vẹn).
+**Ví dụ:**
+
+```js
+const mySchema = SDO.schema({
+	id: 'number',
+	name: 'string',
+	tags: ['string'], // Array of strings
+});
+```
 
 ---
 
-### `StoredDataObject.from(config, options?)`
+### `SDO.create(config, options?)`
 
-Tạo (hoặc mở) store từ file JSON. Hàm là `static async` và trả về một đối tượng chứa `data`, `filePath` và các method thao tác.
+Tạo hoặc mở một stored data object từ file JSON. Nếu file không tồn tại, sẽ tự động tạo với giá trị mặc định.
 
-**Tham số `config` (object):**
+**Tham số `config`:**
 
-- `file: string` — đường dẫn tới file JSON (file sẽ được tạo nếu không tồn tại).
-- `storageType: 'object' | 'array'` — chế độ lưu trữ: một object đơn hoặc một mảng các object theo schema.
-- `schema: SchemaDefinition` — schema định nghĩa dữ liệu.
-- `initValue?` — (tuỳ chọn) giá trị khởi tạo khi file không tồn tại. Với `storageType: 'object'` truyền 1 object; với `'array'` truyền 1 mảng các object.
+- `file: string` — Đường dẫn tới file JSON (tương đối hoặc tuyệt đối)
+- `schema: SchemaDefinition` — Schema định nghĩa cấu trúc dữ liệu
+- `default?: any` — Giá trị khởi tạo khi file chưa tồn tại (nếu không cung cấp, sẽ dùng giá trị mặc định từ schema)
 
-**Tham số `options` (tuỳ chọn):**
+**Tham số `options` (tùy chọn):**
 
-- `encoding?: BufferEncoding` — mặc định `'utf8'`.
-- `autoValidate?: boolean` — mặc định `true`. Nếu `true` thì dữ liệu khởi tạo và dữ liệu đọc từ file sẽ được validate theo schema; nếu validation thất bại sẽ ném lỗi.
+- `encoding?: BufferEncoding` — Encoding của file, mặc định `'utf8'`
+- `autoValidate?: boolean` — Tự động validate dữ liệu, mặc định `true`
 
-**Trả về:** một object có dạng (tóm tắt):
+**Trả về:**
 
-```js
+Promise resolve về object có các thuộc tính:
+
+```typescript
 {
-  data,       // dữ liệu đã được load/khởi tạo
-  filePath,   // đường dẫn tuyệt đối tới file
-  async write(),   // ghi data hiện tại vào file (validate trước khi ghi nếu autoValidate = true)
-  async reload(),  // đọc lại file và cập nhật dữ liệu hiện tại (giữ tham chiếu)
-  async reset(newInitValue?) // reset về mặc định hoặc newInitValue và ghi ra file
+  data: T,              // Dữ liệu typed theo schema
+  filePath: string,     // Đường dẫn tuyệt đối tới file
+  write(): Promise<void>,        // Ghi data xuống file
+  reload(): Promise<void>,       // Đọc lại từ file
+  reset(newDefault?: T): Promise<void>  // Reset về giá trị mặc định
 }
 ```
 
-**Hành vi quan trọng**
-
-- Nếu file không tồn tại, thư viện sẽ tạo thư mục cha (recursive) và ghi file với giá trị `initValue` hoặc giá trị mặc định sinh từ schema.
-- Mặc định `autoValidate` là `true`. Nếu bất kỳ giá trị nào không khớp schema, hàm sẽ ném lỗi với thông báo chi tiết.
-- Thư viện có cơ chế _file lock_ nội bộ để đảm bảo các thao tác đọc/ghi/reload/reset được thực hiện tuần tự trong cùng một tiến trình (giảm race condition). Đây không phải cơ chế lock giữa các tiến trình khác nhau.
-- Khi `reload()` hoặc `reset()` được gọi, dữ liệu hiện tại được cập nhật **tại chỗ** (mutate) để giữ nguyên tham chiếu cho code khác đang giữ tham chiếu tới `data` (ví dụ: UI, systems, v.v.).
-
-## Datatypes / Schema
-
-Schema định nghĩa bằng object; mỗi property có thể là một **loại cơ bản** hoặc một **nested schema**.
-
-**Các giá trị kiểu property hợp lệ**
-
-- `'string'` — chuỗi bắt buộc, nếu không có giá trị sẽ được khởi tạo thành `''`.
-- `'string?'` — chuỗi tùy chọn (`string | undefined`).
-- `'number'` — số bắt buộc, mặc định `0`.
-- `'number?'` — số tùy chọn (`number | undefined`).
-- `'boolean'` — boolean bắt buộc, mặc định `false`.
-- `'boolean?'` — boolean tùy chọn (`boolean | undefined`).
-- nested object — schema lồng nhau (các key con theo cùng cú pháp ở trên).
-
-**Ví dụ schema hợp lệ**
+**Ví dụ:**
 
 ```js
-const schema = defineSchema({
-	id: 'number',
-	name: 'string?',
-	profile: {
-		email: 'string',
-		verified: 'boolean?',
+const store = await SDO.create({
+	file: './data.json',
+	schema: SDO.schema({ count: 'number' }),
+	default: { count: 0 },
+});
+```
+
+---
+
+### `store.write()`
+
+Ghi dữ liệu hiện tại xuống file. Nếu `autoValidate: true`, sẽ validate trước khi ghi.
+
+**Trả về:** `Promise<void>`
+
+**Throws:** Error nếu validation thất bại (khi `autoValidate: true`)
+
+**Ví dụ:**
+
+```js
+store.data.count = 42;
+await store.write();
+```
+
+---
+
+### `store.reload()`
+
+Đọc lại dữ liệu từ file và cập nhật `store.data` **in-place** (giữ nguyên tham chiếu object).
+
+**Trả về:** `Promise<void>`
+
+**Lưu ý:** Method này cập nhật object reference hiện tại thay vì tạo object mới, giúp các component khác đang giữ reference vẫn hoạt động đúng.
+
+**Ví dụ:**
+
+```js
+const dataRef = store.data;
+await store.reload();
+console.log(dataRef === store.data); // true - cùng reference
+```
+
+---
+
+### `store.reset(newDefault?)`
+
+Reset dữ liệu về giá trị mặc định ban đầu (hoặc `newDefault` nếu được cung cấp) và ghi xuống file.
+
+**Tham số:**
+
+- `newDefault?: T` — Giá trị mới để reset (tùy chọn)
+
+**Trả về:** `Promise<void>`
+
+**Ví dụ:**
+
+```js
+// Reset về default ban đầu
+await store.reset();
+
+// Reset về giá trị mới
+await store.reset({ count: 100 });
+```
+
+## Schema Types
+
+Schema định nghĩa cấu trúc và kiểu dữ liệu. Mỗi property có thể là:
+
+### Primitive Types
+
+| Schema Type  | TypeScript Type        | Default Value | Mô tả            |
+| ------------ | ---------------------- | ------------- | ---------------- |
+| `'string'`   | `string`               | `''`          | Chuỗi bắt buộc   |
+| `'string?'`  | `string \| undefined`  | `undefined`   | Chuỗi tùy chọn   |
+| `'number'`   | `number`               | `0`           | Số bắt buộc      |
+| `'number?'`  | `number \| undefined`  | `undefined`   | Số tùy chọn      |
+| `'boolean'`  | `boolean`              | `false`       | Boolean bắt buộc |
+| `'boolean?'` | `boolean \| undefined` | `undefined`   | Boolean tùy chọn |
+
+### Array Types
+
+Để định nghĩa array, sử dụng cú pháp `[itemSchema]`:
+
+```js
+const schema = SDO.schema({
+	tags: ['string'], // Array of strings
+	scores: ['number'], // Array of numbers
+	items: [
+		{
+			// Array of objects
+			id: 'number',
+			name: 'string',
+		},
+	],
+});
+```
+
+**Lưu ý:** Array schema phải là tuple với đúng 1 phần tử (item schema).
+
+### Nested Objects
+
+```js
+const schema = SDO.schema({
+	user: {
+		// Nested object
+		profile: {
+			// Deeply nested
+			name: 'string',
+			age: 'number?',
+		},
+		settings: {
+			theme: 'string',
+		},
 	},
 });
 ```
 
-**Mapping sang runtime types (tổng quan)**
+### Complex Example
 
-- `string` → `string` (mặc định `''` nếu required và không có giá trị)
-- `string?` → `string | undefined`
-- `number` → `number` (mặc định `0`)
-- `number?` → `number | undefined`
-- `boolean` → `boolean` (mặc định `false`)
-- `boolean?` → `boolean | undefined`
-- nested object → object có các field tương ứng
+```js
+const blogSchema = SDO.schema({
+	posts: [
+		{
+			id: 'number',
+			title: 'string',
+			content: 'string',
+			published: 'boolean',
+			tags: ['string'],
+			author: {
+				name: 'string',
+				email: 'string',
+			},
+			metadata: {
+				views: 'number',
+				likes: 'number',
+				createdAt: 'number',
+			},
+		},
+	],
+	config: {
+		siteName: 'string',
+		postsPerPage: 'number',
+	},
+});
+```
 
-**Ghi chú về giá trị mặc định**
+## Validation
 
-- `createDefaultFromSchema` sẽ sinh giá trị mặc định cho các field **không optional** theo quy tắc trên. Các field optional sẽ không được set (giữ `undefined`) nếu không có giá trị khởi tạo.
+Khi `autoValidate: true` (mặc định), dữ liệu được validate trong các trường hợp:
 
-## Lỗi & xử lý ngoại lệ
+1. **Khi khởi tạo** - Validate giá trị `default`
+2. **Khi đọc file** - Validate dữ liệu từ file
+3. **Trước khi ghi** - Validate `store.data` trước `write()`
+4. **Khi reset** - Validate giá trị `newDefault`
 
-- Nếu file chứa JSON không hợp lệ, hàm đọc sẽ ném lỗi kèm thông báo `"Invalid JSON in file: <path>..."`.
-- Nếu `autoValidate: true` và dữ liệu (từ `initValue` hoặc file) không khớp schema thì `from()` hoặc `write()` sẽ ném lỗi với thông báo chi tiết (chỉ rõ field và kiểu mong đợi).
-- Với `storageType: 'array'`, khi validate bắt buộc dữ liệu đọc từ file phải là một mảng (nếu không sẽ ném lỗi).
+### Validation Errors
 
-## Ghi chú vận hành / giới hạn
+Khi validation thất bại, error message sẽ chỉ rõ:
 
-- Cơ chế khóa file là cho mức tiến trình (in-process) — không đảm bảo an toàn cho nhiều tiến trình/instance cùng sửa file đồng thời.
-- Thiết kế phù hợp cho dataset nhỏ/mức read-write vừa phải; không khuyến nghị cho ứng dụng production có nhu cầu concurrency cao hoặc dataset lớn.
-- Các thông báo lỗi cố gắng rõ ràng để dễ debug (ví dụ nêu field nào sai kiểu và giá trị hiện tại).
+- Field nào bị lỗi
+- Kiểu mong đợi vs kiểu thực tế
+- Giá trị hiện tại (JSON)
 
-## Ví dụ chi tiết
+**Ví dụ error:**
 
-Các ví dụ đầy đủ (array handling, multi-instance sync, error cases, v.v.) nằm trong `example/index.js`.
+```
+Field 'user.age' must be a number, got string: "25"
+Field 'items[2].active' must be a boolean, got undefined
+```
+
+### Tắt Validation
+
+Nếu muốn tắt validation (không khuyến nghị), set `autoValidate: false`:
+
+```js
+const store = await SDO.create(
+	{
+		file: './data.json',
+		schema: mySchema,
+	},
+	{
+		autoValidate: false, // Tắt validation
+	}
+);
+```
+
+## File Operations & Locking
+
+### File Lock
+
+Thư viện có cơ chế **in-process file locking** để đảm bảo các operations (write, reload, reset) không bị race condition trong cùng một Node.js process.
+
+**Lưu ý:** Đây không phải inter-process lock. Nếu có nhiều processes cùng truy cập file, cần giải pháp khác (như database hoặc external locking mechanism).
+
+### Auto-create File
+
+Nếu file không tồn tại:
+
+1. Tự động tạo thư mục cha (recursive)
+2. Tạo file với giá trị `default` hoặc giá trị mặc định từ schema
+3. Format JSON với indent (tab)
+
+### Reference Preservation
+
+Khi `reload()` hoặc `reset()`, dữ liệu được cập nhật **in-place** thay vì tạo object mới:
+
+```js
+const store = await SDO.create({
+	file: './data.json',
+	schema: SDO.schema({ count: 'number' }),
+});
+
+const ref1 = store.data;
+await store.reload();
+const ref2 = store.data;
+
+console.log(ref1 === ref2); // true - cùng reference
+```
+
+Điều này quan trọng khi nhiều phần của ứng dụng giữ reference tới `store.data`.
+
+## Error Handling
+
+### Invalid JSON
+
+Nếu file chứa JSON không hợp lệ:
+
+```js
+try {
+	const store = await SDO.create({
+		file: './corrupted.json',
+		schema: mySchema,
+	});
+} catch (error) {
+	// Error: Invalid JSON in file: /path/to/corrupted.json. Unexpected token...
+}
+```
+
+### Schema Mismatch
+
+Nếu dữ liệu không khớp schema (với `autoValidate: true`):
+
+```js
+try {
+	await store.write();
+} catch (error) {
+	// Error: Data validation failed before write: Field 'age' must be a number, got string: "25"
+}
+```
+
+### File Access Errors
+
+Nếu không có quyền đọc/ghi file:
+
+```js
+try {
+	const store = await SDO.create({
+		file: '/root/protected.json',
+		schema: mySchema,
+	});
+} catch (error) {
+	// Error: EACCES: permission denied
+}
+```
+
+## Best Practices
+
+### 1. Sử dụng `SDO.schema()` cho Type Safety
+
+```js
+// Good ✓
+const schema = SDO.schema({
+	name: 'string',
+	age: 'number',
+});
+
+// OK nhưng mất type inference
+const schema = {
+	name: 'string',
+	age: 'number',
+};
+```
+
+### 2. Luôn `await write()` sau khi thay đổi
+
+```js
+// Good ✓
+store.data.count++;
+await store.write();
+
+// Bad ✗ - Thay đổi chưa được lưu
+store.data.count++;
+// ... code khác
+```
+
+### 3. Xử lý errors
+
+```js
+try {
+	await store.write();
+} catch (error) {
+	console.error('Failed to save:', error.message);
+	// Rollback hoặc retry
+}
+```
+
+### 4. Sử dụng default values hợp lý
+
+```js
+const store = await SDO.create({
+	file: './data.json',
+	schema: SDO.schema({
+		users: [{ id: 'number', name: 'string' }],
+		settings: { theme: 'string' },
+	}),
+	default: {
+		users: [], // Empty array sẵn sàng dùng
+		settings: { theme: 'light' }, // Có giá trị mặc định
+	},
+});
+```
+
+### 5. Tránh mutations phức tạp
+
+```js
+// Good ✓ - Đơn giản, rõ ràng
+store.data.count = 10;
+await store.write();
+
+// Risky ⚠ - Mutation sâu, khó track
+const deepRef = store.data.nested.deeply.buried;
+deepRef.value = 'changed';
+await store.write();
+```
+
+## Use Cases
+
+### Configuration Management
+
+```js
+const config = await SDO.create({
+	file: './config.json',
+	schema: SDO.schema({
+		apiUrl: 'string',
+		timeout: 'number',
+		retries: 'number',
+		debug: 'boolean?',
+	}),
+	default: {
+		apiUrl: 'https://api.example.com',
+		timeout: 5000,
+		retries: 3,
+	},
+});
+```
+
+### Simple Database
+
+```js
+const db = await SDO.create({
+	file: './todos.json',
+	schema: SDO.schema({
+		todos: [
+			{
+				id: 'number',
+				text: 'string',
+				completed: 'boolean',
+				createdAt: 'number',
+			},
+		],
+	}),
+	default: { todos: [] },
+});
+
+// CRUD operations
+const addTodo = async (text) => {
+	db.data.todos.push({
+		id: Date.now(),
+		text,
+		completed: false,
+		createdAt: Date.now(),
+	});
+	await db.write();
+};
+
+const toggleTodo = async (id) => {
+	const todo = db.data.todos.find((t) => t.id === id);
+	if (todo) {
+		todo.completed = !todo.completed;
+		await db.write();
+	}
+};
+```
+
+### Cache Management
+
+```js
+const cache = await SDO.create({
+	file: './cache.json',
+	schema: SDO.schema({
+		entries: [
+			{
+				key: 'string',
+				value: 'string',
+				expiry: 'number',
+			},
+		],
+	}),
+	default: { entries: [] },
+});
+
+const setCache = async (key, value, ttl = 3600000) => {
+	const idx = cache.data.entries.findIndex((e) => e.key === key);
+	const entry = {
+		key,
+		value: JSON.stringify(value),
+		expiry: Date.now() + ttl,
+	};
+
+	if (idx >= 0) {
+		cache.data.entries[idx] = entry;
+	} else {
+		cache.data.entries.push(entry);
+	}
+
+	await cache.write();
+};
+
+const getCache = (key) => {
+	const entry = cache.data.entries.find((e) => e.key === key && e.expiry > Date.now());
+	return entry ? JSON.parse(entry.value) : null;
+};
+```
+
+## Limitations
+
+- **Không phù hợp cho production apps** với traffic cao hoặc dữ liệu lớn
+- **Không có inter-process locking** - Không an toàn khi nhiều processes cùng truy cập
+- **Không có transactions** - Các thay đổi được apply ngay, không có rollback tự động
+- **Không có indexing** - Tìm kiếm trong array là O(n)
+- **Không có query language** - Phải dùng JavaScript để filter/find
+- **File-based** - Performance phụ thuộc vào filesystem
+
+Nếu cần các tính năng trên, hãy xem xét database thực (SQLite, PostgreSQL, MongoDB, etc.)
+
+## TypeScript Support
+
+Thư viện được viết với JSDoc và hỗ trợ đầy đủ type inference cho TypeScript:
+
+```typescript
+import SDO from 'stored-data-object';
+
+const schema = SDO.schema({
+	count: 'number',
+	name: 'string',
+	active: 'boolean?',
+});
+
+const store = await SDO.create({
+	file: './data.json',
+	schema,
+});
+
+// TypeScript biết chính xác types:
+store.data.count; // number
+store.data.name; // string
+store.data.active; // boolean | undefined
+```
+
+## License
+
+MIT
